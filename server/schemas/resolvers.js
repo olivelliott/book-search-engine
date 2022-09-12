@@ -1,5 +1,3 @@
-import bookSchema from "../models/Book";
-
 const { AuthenticationError } = require("apollo-server-express");
 const { User } = require("../models");
 const { signToken } = require("../utils/auth");
@@ -17,11 +15,15 @@ const resolvers = {
 
       throw new AuthenticationError("Not Logged In");
     },
+    users: async () => {
+      return User.find().select("-__v -password").populate("savedBooks");
+    },
   },
 
   Mutation: {
     addUser: async (parent, args) => {
       const user = await User.create(args);
+      console.log(user);
       const token = signToken(user);
 
       return { token, user };
@@ -43,38 +45,35 @@ const resolvers = {
       return { token, user };
     },
     saveBook: async (parent, { input }, context) => {
-        if (context.user) {
-            const updatedBooks = await User.findOneAndUpdate(
-                { _id: context.user._id },
-                { $push: { savedBooks: input }},
-                { new: true, runValidators: true }
-            ).populate('savedBooks');
-            
-            return updatedBooks;
-        }
+      if (context.user) {
+        let updatedUser = await User.findByIdAndUpdate(
+          { _id: context.user._id },
+          { $push: { savedBooks: input } },
+          { new: true }
+        ).populate("savedBooks");
 
-        throw new AuthenticationError("Not Logged In!");
+        return updatedUser;
+      }
 
+      throw new AuthenticationError("Not Logged In!");
     },
-    deleteBook: async (parent, { bookId }, context) => {
-        if (context.user) {
-            const updatedBooks = await User.findOneAndUpdate(
-                { _id: context.user._id },
-                { $pull: { savedBooks: { bookId: bookId } }},
-                { new: true }
-            ).populate('savedBooks');
+    removeBook: async (parent, { bookId }, context) => {
+      if (context.user) {
+        const updatedBooks = await User.findByIdAndUpdate(
+          { _id: context.user._id },
+          { $pull: { savedBooks: { bookId: bookId } } },
+          { new: true }
+        ).populate("savedBooks");
 
-            return updatedBooks;
-        }
+        return updatedBooks;
+      }
 
-        throw new AuthenticationError("Not Logged In!");
-
-    }
-
+      throw new AuthenticationError("Not Logged In!");
+    },
   },
 };
 
-export default resolvers;
+module.exports = resolvers;
 //   async saveBook({ user, body }, res) {
 //     console.log(user);
 //     try {
