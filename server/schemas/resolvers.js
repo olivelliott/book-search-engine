@@ -1,54 +1,80 @@
-const { AuthenticationError } = require('apollo-server-express');
-const { User } = require('../models');
-const { signToken } = require('../utils/auth');
+import bookSchema from "../models/Book";
+
+const { AuthenticationError } = require("apollo-server-express");
+const { User } = require("../models");
+const { signToken } = require("../utils/auth");
 
 const resolvers = {
-    Query: {
-        
+  Query: {
+    me: async (parent, args, context) => {
+      if (context.user) {
+        const userData = await User.findOne({ _id: context.user._id })
+          .select("-__v -password")
+          .populate("savedBooks");
+
+        return userData;
+      }
+
+      throw new AuthenticationError("Not Logged In");
+    },
+  },
+
+  Mutation: {
+    addUser: async (parent, args) => {
+      const user = await User.create(args);
+      const token = signToken(user);
+
+      return { token, user };
+    },
+    login: async (parent, { email, password }) => {
+      const user = await User.findOne({ email });
+
+      if (!user) {
+        throw new AuthenticationError("Incorrect credentials");
+      }
+
+      const correctPw = await user.isCorrectPassword(password);
+
+      if (!correctPw) {
+        throw new AuthenticationError("Incorrect credentials");
+      }
+
+      const token = signToken(user);
+      return { token, user };
+    },
+    saveBook: async (parent, { input }, context) => {
+        if (context.user) {
+            const updatedBooks = await User.findOneAndUpdate(
+                { _id: context.user._id },
+                { $push: { savedBooks: input }},
+                { new: true, runValidators: true }
+            ).populate('savedBooks');
+            
+            return updatedBooks;
+        }
+
+        throw new AuthenticationError("Not Logged In!");
+
+    },
+    deleteBook: async (parent, { bookId }, context) => {
+        if (context.user) {
+            const updatedBooks = await User.findOneAndUpdate(
+                { _id: context.user._id },
+                { $pull: { savedBooks: { bookId: bookId } }},
+                { new: true }
+            ).populate('savedBooks');
+
+            return updatedBooks;
+        }
+
+        throw new AuthenticationError("Not Logged In!");
+
     }
-}
 
-// module.exports = {
-//   // get a single user by either their id or their username
-//   async getSingleUser({ user = null, params }, res) {
-//     const foundUser = await User.findOne({
-//       $or: [{ _id: user ? user._id : params.id }, { username: params.username }],
-//     });
+  },
+};
 
-//     if (!foundUser) {
-//       return res.status(400).json({ message: 'Cannot find a user with this id!' });
-//     }
-
-//     res.json(foundUser);
-//   },
-//   // create a user, sign a token, and send it back (to client/src/components/SignUpForm.js)
-//   async createUser({ body }, res) {
-//     const user = await User.create(body);
-
-//     if (!user) {
-//       return res.status(400).json({ message: 'Something is wrong!' });
-//     }
-//     const token = signToken(user);
-//     res.json({ token, user });
-//   },
-//   // login a user, sign a token, and send it back (to client/src/components/LoginForm.js)
-//   // {body} is destructured req.body
-//   async login({ body }, res) {
-//     const user = await User.findOne({ $or: [{ username: body.username }, { email: body.email }] });
-//     if (!user) {
-//       return res.status(400).json({ message: "Can't find this user" });
-//     }
-
-//     const correctPw = await user.isCorrectPassword(body.password);
-
-//     if (!correctPw) {
-//       return res.status(400).json({ message: 'Wrong password!' });
-//     }
-//     const token = signToken(user);
-//     res.json({ token, user });
-//   },
-//   // save a book to a user's `savedBooks` field by adding it to the set (to prevent duplicates)
-//   // user comes from `req.user` created in the auth middleware function
+export default resolvers;
 //   async saveBook({ user, body }, res) {
 //     console.log(user);
 //     try {
